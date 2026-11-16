@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Простой кликер</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    color: #eee;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    user-select: none;
+    padding: 20px;
+  }
+  h1 { margin-bottom: 14px; font-size: 1.6em; }
+
+  /* ---- Строка прогресса уровня (сверху) ---- */
+  .level-bar-wrap {
+    width: 100%;
+    max-width: 380px;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+  }
+  .level-bar-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95em;
+    margin-bottom: 8px;
+  }
+  .level-bar-top span { color: #f4d03f; font-weight: bold; }
+  .level-bar {
+    height: 18px;
+    background: #0f1628;
+    border-radius: 9px;
+    overflow: hidden;
+  }
+  .level-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #27ae60, #2ecc71);
+    border-radius: 9px;
+    transition: width 0.15s ease;
+  }
+
+  .stats {
+    display: flex;
+    gap: 20px;
+    margin: 10px 0;
+    font-size: 1.05em;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .stats div { background: #16213e; padding: 8px 16px; border-radius: 8px; }
+  .stats span { color: #f4d03f; font-weight: bold; }
+
+  #clickBtn {
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    border: none;
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #fff;
+    background: radial-gradient(circle at 30% 30%, #e74c3c, #a93226);
+    box-shadow: 0 8px 0 #7b241c, 0 12px 25px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: transform 0.05s, box-shadow 0.05s;
+    margin: 20px 0;
+  }
+  #clickBtn:active {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #7b241c, 0 5px 12px rgba(0,0,0,0.5);
+  }
+  #clickBtn:hover { filter: brightness(1.08); }
+
+  .upgrades {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 380px;
+  }
+  .upgrade {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #16213e;
+    padding: 12px 16px;
+    border-radius: 10px;
+    gap: 10px;
+  }
+  .upgrade .info { font-size: 0.95em; line-height: 1.4; }
+  .upgrade .info small { color: #9aa4b2; }
+  .upgrade button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #27ae60;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .upgrade button:hover:not(:disabled) { background: #2ecc71; }
+  .upgrade button:disabled { background: #444; cursor: not-allowed; color: #888; }
+
+  /* ---- Стартовое меню ---- */
+  #startOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 20, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .start-dialog {
+    background: #16213e;
+    padding: 30px 36px;
+    border-radius: 16px;
+    text-align: center;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    max-width: 340px;
+  }
+  .start-dialog h2 { margin-bottom: 20px; font-size: 1.3em; }
+  .start-dialog .buttons { display: flex; gap: 16px; justify-content: center; }
+  .start-dialog button {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  #yesBtn { background: #27ae60; color: #fff; }
+  #yesBtn:hover { background: #2ecc71; }
+  #noBtn { background: #c0392b; color: #fff; }
+  #noBtn:hover { background: #e74c3c; }
+  .start-dialog button:active { transform: scale(0.96); }
+
+  /* ---- Экран закрытия игры ---- */
+  #closedScreen {
+    position: fixed;
+    inset: 0;
+    background: #0a0a14;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    flex-direction: column;
+    text-align: center;
+    padding: 20px;
+  }
+  #closedScreen h2 { font-size: 2em; color: #e74c3c; margin-bottom: 10px; }
+  #closedScreen p { color: #9aa4b2; }
+</style>
+</head>
+<body>
+
+<h1>👆 Кликер</h1>
+
+<!-- Строка прогресса до следующего уровня -->
+<div class="level-bar-wrap">
+  <div class="level-bar-top">
+    <div>Уровень: <span id="level">1</span></div>
+    <div><span id="progressText">0 / 10</span> кликов</div>
+  </div>
+  <div class="level-bar">
+    <div class="level-bar-fill" id="levelBarFill"></div>
+  </div>
+</div>
+
+<div class="stats">
+  <div>Всего кликов: <span id="totalClicks">0</span></div>
+</div>
+
+<button id="clickBtn">КЛИК</button>
+
+<div class="upgrades">
+  <div class="upgrade">
+    <div class="info">
+      <strong>Прокачать клик</strong><br>
+      <small id="clickUpCostInfo">Стоимость: 10 кликов</small><br>
+      <small id="clickUpNote"></small>
+    </div>
+    <button id="clickUpBtn" disabled>Прокачать</button>
+  </div>
+</div>
+
+<!-- Стартовое меню -->
+<div id="startOverlay">
+  <div class="start-dialog">
+    <h2>Начать игру?</h2>
+    <div class="buttons">
+      <button id="yesBtn">Йа</button>
+      <button id="noBtn">Найн</button>
+    </div>
+  </div>
+</div>
+
+<!-- Экран закрытия -->
+<div id="closedScreen">
+  <h2>Auf Wiedersehen!</h2>
+  <p>Игра закрыта.</p>
+</div>
+
+<!-- Аудиоэлементы -->
+<audio id="morgenAudio" src="morgen.mp3" preload="auto"></audio>
+<audio id="tagAudio" src="tag.mp3" preload="auto"></audio>
+<audio id="abendAudio" src="abend.mp3" preload="auto"></audio>
+<audio id="deutchAudio" src="deutch.mp3" preload="auto"></audio>
+<audio id="fantastischAudio" src="fantastisch.mp3" preload="auto"></audio>
+
+<script>
+  // ================= СОСТОЯНИЕ ИГРЫ =================
+  let totalClicks = 0;
+  let level = 1;
+  let levelProgress = 0;
+
+  const CLICK_POWER = 1;
+
+  // Порог уровня: стартует с 10
+  const START_THRESHOLD = 10;
+  let levelStep = START_THRESHOLD;
+
+  // Понижать порог можно только каждые 50 уровней
+  const THRESHOLD_LOWER_EVERY = 50;
+  let lastThresholdLowerLevel = 0; // на каком уровне последний раз понижали порог
+
+  let clickUpCost = 10;
+
+  // ================= ЭЛЕМЕНТЫ =================
+  const totalClicksEl = document.getElementById('totalClicks');
+  const levelEl       = document.getElementById('level');
+  const progressTextEl = document.getElementById('progressText');
+  const levelBarFill  = document.getElementById('levelBarFill');
+
+  const clickBtn      = document.getElementById('clickBtn');
+  const clickUpBtn    = document.getElementById('clickUpBtn');
+  const clickUpCostInfo = document.getElementById('clickUpCostInfo');
+  const clickUpNote   = document.getElementById('clickUpNote');
+
+  const startOverlay  = document.getElementById('startOverlay');
+  const yesBtn        = document.getElementById('yesBtn');
+  const noBtn         = document.getElementById('noBtn');
+  const closedScreen  = document.getElementById('closedScreen');
+
+  const morgenAudio      = document.getElementById('morgenAudio');
+  const tagAudio         = document.getElementById('tagAudio');
+  const abendAudio       = document.getElementById('abendAudio');
+  const deutchAudio      = document.getElementById('deutchAudio');
+  const fantastischAudio = document.getElementById('fantastischAudio');
+
+  // ================= УТИЛИТЫ =================
+  // Играем звук, игнорируя ошибки отсутствия файла
+  function playSound(audioEl) {
+    try {
+      audioEl.currentTime = 0;
+      const p = audioEl.play();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* игнорируем */ }
+  }
+
+  // Приветствие по времени суток
+  function playTimeOfDaySound() {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) {
+      playSound(morgenAudio);      // утро
+    } else if (hour >= 12 && hour < 18) {
+      playSound(tagAudio);         // день
+    } else {
+      playSound(abendAudio);       // вечер/ночь
+    }
+  }
+
+  // ================= ЛОГИКА УРОВНЕЙ =================
+  function canLowerThreshold() {
+    // Понижать порог можно только каждые 50 уровней
+    // (первый раз — на 50-м уровне, затем на 100-м и т.д.)
+    return level >= THRESHOLD_LOWER_EVERY &&
+           level - lastThresholdLowerLevel >= THRESHOLD_LOWER_EVERY;
+  }
+
+  // ================= ИНТЕРФЕЙС =================
+  function updateUI() {
+    totalClicksEl.textContent = totalClicks;
+    levelEl.textContent = level;
+
+    progressTextEl.textContent = levelProgress + ' / ' + levelStep;
+    levelBarFill.style.width = (levelProgress / levelStep * 100) + '%';
+
+    clickUpCostInfo.textContent = 'Стоимость: ' + clickUpCost + ' кликов';
+
+    if (canLowerThreshold()) {
+      clickUpBtn.disabled = totalClicks < clickUpCost;
+      clickUpBtn.textContent = clickUpBtn.disabled ? 'Не хватает' : 'Прокачать';
+      clickUpNote.textContent = 'Понизит порог уровня на 1';
+      clickUpNote.style.color = '#9aa4b2';
+    } else {
+      clickUpBtn.disabled = true;
+      clickUpBtn.textContent = 'Недоступно';
+      const nextLevel = lastThresholdLowerLevel + THRESHOLD_LOWER_EVERY;
+      clickUpNote.textContent = 'Доступно с ' + nextLevel + ' уровня';
+      clickUpNote.style.color = '#c0392b';
+    }
+  }
+
+  // ================= КЛИК =================
+  clickBtn.addEventListener('click', () => {
+    totalClicks += CLICK_POWER;
+    levelProgress += CLICK_POWER;
+
+    // Повышаем уровень (может быть несколько за раз)
+    while (levelProgress >= levelStep) {
+      levelProgress -= levelStep;
+      level += 1;
+      // Звук при переходе на новый уровень
+      playSound(fantastischAudio);
+    }
+
+    updateUI();
+  });
+
+  // ================= ПРОКАЧКА КЛИКА =================
+  clickUpBtn.addEventListener('click', () => {
+    if (totalClicks < clickUpCost) return;
+    if (!canLowerThreshold()) return;
+
+    totalClicks -= clickUpCost;
+
+    // Понижаем порог уровня на 1 (мин. 1)
+    levelStep = Math.max(1, levelStep - 1);
+    lastThresholdLowerLevel = level;
+
+    // Если прогресс уже достаточен — повышаем уровень
+    let leveledUp = false;
+    while (levelProgress >= levelStep) {
+      levelProgress -= levelStep;
+      level += 1;
+      leveledUp = true;
+    }
+    if (leveledUp) playSound(fantastischAudio);
+
+    // Стоимость следующей прокачки растёт
+    clickUpCost = Math.ceil(clickUpCost * 1.5);
+
+    updateUI();
+  });
+
+  // ================= СТАРТОВОЕ МЕНЮ =================
+  yesBtn.addEventListener('click', () => {
+    startOverlay.style.display = 'none';
+    playTimeOfDaySound(); // звук в зависимости от времени суток
+    updateUI();
+  });
+
+  noBtn.addEventListener('click', () => {
+    // Закрываем игру
+    startOverlay.style.display = 'none';
+    closedScreen.style.display = 'flex';
+
+    // Пытаемся закрыть вкладку/окно
+    // (большинство браузеров не позволяет закрыть окно, открытое не скриптом)
+    setTimeout(() => {
+      window.close();
+      // Если закрыть не удалось — показываем экран закрытия
+      closedScreen.style.display = 'flex';
+    }, 100);
+  });
+
+  // ================= ИНИЦИАЛИЗАЦИЯ =================
+  // При старте игры проигрываем deutch.mp3
+  // (браузеры могут блокировать автозвук до взаимодействия пользователя —
+  //  но раз меню требует нажатия, попробуем проиграть сразу)
+  playSound(deutchAudio);
+
+  updateUI();
+</script>
+
+</body>
+</html>
